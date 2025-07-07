@@ -2,7 +2,6 @@
 
 #include <Windows.h>
 #include <Psapi.h>
-#include <iostream>
 #include <vector>
 #include <format>
 #include "console.h"
@@ -14,16 +13,19 @@
 #pragma comment(lib, "libMinHook.x86.lib")
 #endif
 
-#define NOP 0x90
+constexpr unsigned char NOP = 0x90;
 
 class Hooks
 {
 	private:
 		inline static uintptr_t minimumAddress = 0;
 		inline static uintptr_t maximumAddress = 0;
+		inline static bool initialized = false;
 
 	public:
-		int init();
+		bool init();
+		bool hooksInitialized(const std::string& caller);
+#define isInitialized (this->hooksInitialized(__func__))
 		bool addressInRange(uintptr_t address = 0);
 		uintptr_t readAddress(uintptr_t pointer, std::vector<unsigned int> offsets);
 		void* functionAddress(uintptr_t pointer);
@@ -37,3 +39,5 @@ class Hooks
 		template <typename ret, typename ... args>
 		auto getVFTableFunction(void* instance, size_t index);
 };
+
+static Hooks hooks;

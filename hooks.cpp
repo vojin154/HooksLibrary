@@ -8,51 +8,72 @@
         Turn into a static library, so I don't have to keep including the whole thing
 */
 
-int Hooks::init() {
+bool Hooks::init() {
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
 
-    this->minimumAddress = (uintptr_t)(system_info.lpMinimumApplicationAddress);
-    if (!this->minimumAddress || this->minimumAddress == 0) {
+    this->minimumAddress = reinterpret_cast<uintptr_t>(system_info.lpMinimumApplicationAddress);
+    if (!this->minimumAddress) {
         LOG_ERROR("Failed to get minimum address!!");
-        return 0;
+        return false;
     }
 
-    this->maximumAddress = (uintptr_t)(system_info.lpMaximumApplicationAddress);
-    if (!this->maximumAddress || this->maximumAddress == 0) {
+    this->maximumAddress = reinterpret_cast<uintptr_t>(system_info.lpMaximumApplicationAddress);
+    if (!this->maximumAddress) {
         LOG_ERROR("Failed to get maximum address!!");
-        return 0;
+        return false;
     }
 
-    return 1;
+    if (this->minimumAddress >= this->maximumAddress) {
+        LOG_ERROR("Minimum address is bigger, than it should be!!");
+        return false;
+    }
+
+    return this->initialized = true;
+}
+
+bool Hooks::hooksInitialized(const std::string& caller) {
+    if (!this->initialized) {
+        std::string err = std::format("[{}] Is trying to use hooks before it's initialized!", caller);
+        LOG_ERROR(err.c_str());
+        return false;
+    }
+
+    return true;
 }
 
 bool Hooks::addressInRange(uintptr_t address) {
+    if (!isInitialized) return false;
+
     return (address != 0 && address > this->minimumAddress && address < this->maximumAddress);
 }
 
 //https://www.youtube.com/watch?v=hlioPJ_uB7M
 uintptr_t Hooks::readAddress(uintptr_t pointer, std::vector<unsigned int> offsets) {
+    if (!isInitialized) return NULL;
+
     uintptr_t address = pointer;
     for (unsigned int i = 0; i < offsets.size(); ++i) {
         address = *(uintptr_t*)address;
 
         if (!address) {
-            return 0; //To prevent crashing when address ends up being invalid
+            return NULL; //To prevent crashing when address ends up being invalid
         }
 
         address += offsets[i];
 
         // Make sure we don't go beyond the limit and crash
         if (!this->addressInRange((uintptr_t)address)) {
-            LOG_WARN("NOT IN RANGE!");
-            return 0;
+            LOG_WARN("Address is not in range!");
+            return NULL;
         }
     }
     return address;
 }
 
 void* Hooks::functionAddress(uintptr_t pointer) {
+    if (!isInitialized) return nullptr;
+
     return (void*)this->readAddress(pointer, {});
 }
 
@@ -67,12 +88,14 @@ void* Hooks::functionAddress(uintptr_t pointer) {
 */
 
 uintptr_t Hooks::signatureScan(const char* pattern, const char* mask, LPCSTR mod_name) {
+    if (!isInitialized) return NULL;
+
     static MODULEINFO mod_info;
     uintptr_t mod = (uintptr_t)GetModuleHandleA(mod_name);
 
     if (!mod) {
         LOG_ERROR("COULDN'T GET MODULE HANDLE!");
-        return 0;
+        return NULL;
     }
 
     GetModuleInformation(GetCurrentProcess(), reinterpret_cast<HMODULE>(mod), &mod_info, sizeof(MODULEINFO));
@@ -87,6 +110,8 @@ uintptr_t Hooks::signatureScan(const char* pattern, const char* mask, LPCSTR mod
 // The signatureScan is for when we don't know, so we scan the whole program for the signature (yes unefficient, but barely makes a difference these days)
 uintptr_t Hooks::getAddressFromSignature(const char* pattern, const char* mask, uintptr_t begin, uintptr_t end)
 {
+    if (!isInitialized) return NULL;
+
     uintptr_t patternLength = strlen(pattern);
 
     for (uintptr_t i = 0; i < end - patternLength; i++)
@@ -105,7 +130,7 @@ uintptr_t Hooks::getAddressFromSignature(const char* pattern, const char* mask, 
             return (begin + i);
         }
     }
-    return 0;
+    return NULL;
 }
 
 /*
@@ -124,16 +149,22 @@ TODO: SAVE FUNCTIONS BASED OFF NAME FOR EASIER ACCESS
     [return] target_address - Pointer for MH_EnableHook/MH_RemoveHook
 */
 LPVOID Hooks::hookFunction(uintptr_t address, LPVOID hook, LPVOID* orig, BOOL enable) {
+    if (!isInitialized) return nullptr;
+
     if (!this->addressInRange((uintptr_t)address)) {
-        return 0;
+        return nullptr;
     }
 
     LPVOID* target_address = reinterpret_cast<LPVOID*>(address); //reinterpret_cast<LPVOID*>(this->readAddress(address, {}));
 
-    MH_CreateHook(target_address, hook, orig);
+    if (MH_CreateHook(target_address, hook, orig) != MH_OK) {
+        LOG_ERROR("Failed to create hook!");
+        return nullptr;
+    }
 
-    if (enable) {
-        MH_EnableHook(target_address);
+    if (enable && MH_EnableHook(target_address) != MH_OK) {
+        LOG_ERROR("Failed to enable hook!");
+        return nullptr;
     }
 
     return target_address;
@@ -141,6 +172,8 @@ LPVOID Hooks::hookFunction(uintptr_t address, LPVOID hook, LPVOID* orig, BOOL en
 
 // https://www.unknowncheats.me/forum/c-and-c-/39238-tutorial-nop-function.html
 void Hooks::nop(void* address, int bytes) {
+    if (!isInitialized) return;
+
     if (!this->addressInRange((uintptr_t)address)) {
         return;
     }
@@ -163,7 +196,10 @@ void Hooks::setLittleEndian(unsigned char array[], int32_t value) {
         Fix that somehow, so I don't have to adjust manually
 */
 
+//size = sizeof(bytes)
 void Hooks::setBytes(void* address, unsigned char bytes[], size_t size) {
+    if (!isInitialized) return;
+
     if (!this->addressInRange((uintptr_t)address) || size == 0) {
         return;
     }
