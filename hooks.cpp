@@ -112,23 +112,23 @@ uintptr_t Hooks::getAddressFromSignature(const char* pattern, const char* mask, 
 {
     if (!isInitialized) return NULL;
 
-    uintptr_t patternLength = strlen(pattern);
+    size_t patternLength = strlen(mask);
+    const unsigned char* unsigned_pattern = reinterpret_cast<const unsigned char*>(pattern);
+    const unsigned char* base = reinterpret_cast<const unsigned char*>(begin);
 
-    for (uintptr_t i = 0; i < end - patternLength; i++)
+    for (uintptr_t i = 0; i + patternLength <= (end - begin); ++i)
     {
         bool found = true;
-        for (uintptr_t j = 0; j < patternLength; j++)
+        for (size_t j = 0; j < patternLength; ++j)
         {
-            if (mask[j] != '?' && pattern[j] != *(char*)(begin + i + j))
+            if (mask[j] != '?' && unsigned_pattern[j] != base[i + j])
             {
                 found = false;
                 break;
             }
         }
         if (found)
-        {
-            return (begin + i);
-        }
+            return begin + i;
     }
     return NULL;
 }
