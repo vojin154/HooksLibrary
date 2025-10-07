@@ -70,6 +70,7 @@ void CConsole::openConsole()
 	if (!console)
 	{
 		console = new CConsole();
+		LOG_SUCCESS("CONSOLE LOADED!");
 	}
 }
 
