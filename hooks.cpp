@@ -10,7 +10,7 @@
 
 bool Hooks::init() {
     if (this->initialized) {
-        LOG_ERROR("[HOOKS] Trying to initialize hooks more than once!");
+        LOG_WARN("[HOOKS] Trying to initialize hooks more than once!");
         return;
     }
 
