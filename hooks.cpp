@@ -9,32 +9,44 @@
 */
 
 bool Hooks::init() {
+    if (this->initialized) {
+        LOG_ERROR("[HOOKS] Trying to initialize hooks more than once!");
+        return;
+    }
+
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
 
     this->minimumAddress = reinterpret_cast<uintptr_t>(system_info.lpMinimumApplicationAddress);
     if (!this->minimumAddress) {
-        LOG_ERROR("Failed to get minimum address!!");
+        LOG_ERROR("[HOOKS] Failed to get minimum address!!");
         return false;
     }
 
     this->maximumAddress = reinterpret_cast<uintptr_t>(system_info.lpMaximumApplicationAddress);
     if (!this->maximumAddress) {
-        LOG_ERROR("Failed to get maximum address!!");
+        LOG_ERROR("[HOOKS] Failed to get maximum address!!");
         return false;
     }
 
     if (this->minimumAddress >= this->maximumAddress) {
-        LOG_ERROR("Minimum address is bigger, than it should be!!");
+        LOG_ERROR("[HOOKS] Minimum address is bigger, than it should be!!");
         return false;
     }
+
+    if (MH_Initialize() != MH_OK) {
+        LOG_ERROR("[HOOKS] Failed to initialize MinHook!");
+        return false;
+    }
+
+    LOG_SUCCESS("[HOOKS] HOOKS INITIALIZED!");
 
     return this->initialized = true;
 }
 
 bool Hooks::hooksInitialized(const std::string& caller) {
     if (!this->initialized) {
-        std::string err = std::format("[{}] Is trying to use hooks before it's initialized!", caller);
+        std::string err = std::format("[HOOKS] {} is trying to use hooks before it's initialized!", caller);
         LOG_ERROR(err.c_str());
         return false;
     }
@@ -64,7 +76,7 @@ uintptr_t Hooks::readAddress(uintptr_t pointer, std::vector<unsigned int> offset
 
         // Make sure we don't go beyond the limit and crash
         if (!this->addressInRange((uintptr_t)address)) {
-            LOG_WARN("Address is not in range!");
+            LOG_WARN("[HOOKS] Address is not in range!");
             return NULL;
         }
     }
@@ -94,7 +106,7 @@ uintptr_t Hooks::signatureScan(const char* pattern, const char* mask, LPCSTR mod
     uintptr_t mod = (uintptr_t)GetModuleHandleA(mod_name);
 
     if (!mod) {
-        LOG_ERROR("COULDN'T GET MODULE HANDLE!");
+        LOG_ERROR("[HOOKS] Couldn't get module handle!");
         return NULL;
     }
 
@@ -116,7 +128,9 @@ uintptr_t Hooks::getAddressFromSignature(const char* pattern, const char* mask, 
     const unsigned char* unsigned_pattern = reinterpret_cast<const unsigned char*>(pattern);
     const unsigned char* base = reinterpret_cast<const unsigned char*>(begin);
 
-    for (uintptr_t i = 0; i + patternLength <= (end - begin); ++i)
+    size_t mod_size = (end - begin);
+
+    for (uintptr_t i = 0; i + patternLength <= mod_size; ++i)
     {
         bool found = true;
         for (size_t j = 0; j < patternLength; ++j)
@@ -158,12 +172,12 @@ LPVOID Hooks::hookFunction(uintptr_t address, LPVOID hook, LPVOID* orig, BOOL en
     LPVOID* target_address = reinterpret_cast<LPVOID*>(address); //reinterpret_cast<LPVOID*>(this->readAddress(address, {}));
 
     if (MH_CreateHook(target_address, hook, orig) != MH_OK) {
-        LOG_ERROR("Failed to create hook!");
+        LOG_ERROR("[HOOKS] Failed to create hook!");
         return nullptr;
     }
 
     if (enable && MH_EnableHook(target_address) != MH_OK) {
-        LOG_ERROR("Failed to enable hook!");
+        LOG_ERROR("[HOOKS] Failed to enable hook!");
         return nullptr;
     }
 
