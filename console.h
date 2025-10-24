@@ -40,6 +40,4 @@ public:
 #define LOG_WARN(msg) LOG_FUNC(msg, 1, FOREGROUND_RED, FOREGROUND_GREEN, FOREGROUND_INTENSITY)
 #define LOG_ERROR(msg) LOG_FUNC(msg, 2, FOREGROUND_RED, FOREGROUND_INTENSITY)
 
-static CConsole console;
-
 #endif
